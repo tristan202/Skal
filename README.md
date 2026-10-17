@@ -1,98 +1,98 @@
 # Skal
 
-En lille SSH-klient med faner, redigerbar serverliste, filoverførsel og serverstatus – inspireret af Termius. Bygget med Electron, xterm.js og ssh2, så den ikke afhænger af PuTTY.
+A small SSH client with tabs, an editable server list, file transfer and server status – inspired by Termius. Built with Electron, xterm.js and ssh2, so it doesn't depend on PuTTY.
 
-## Kom i gang
+## Getting started
 
-Kræver Node.js 18 eller nyere.
+Requires Node.js 18 or newer.
 
 ```
 npm install
 npm start
 ```
 
-Byg et program, der kan installeres:
+Build an installable app:
 
 ```
-npm run dist:win        # Windows-installer (anbefalet – starter hurtigt)
-npm run dist:zip        # Windows: zip, der kan pakkes ud og køres direkte
-npm run dist:portable   # Windows: én portabel .exe (starter langsomt)
-npm run dist            # nuværende platform
+npm run dist:win        # Windows installer (recommended – starts quickly)
+npm run dist:zip        # Windows: zip that can be extracted and run directly
+npm run dist:portable   # Windows: a single portable .exe (starts slowly)
+npm run dist            # current platform
 ```
 
-## Funktioner
+## Features
 
-- Serverliste med grupper, søgning og farver. Opret, redigér, duplikér og slet servere fra panelet til højre eller ved at højreklikke. Dobbeltklik for at forbinde.
-- Flere sessioner i faner, også flere til samme server (Ctrl+Shift+D). Skriver du `exit`, lukker fanen; falder forbindelsen ud, kan du trykke Enter for at genforbinde.
-- Login med adgangskode, privat nøgle eller SSH-agent / Pageant. Nøgler kan være OpenSSH, PEM, PKCS#8 eller PuTTY .ppk (v2 og v3). Mangler en passphrase, bliver du spurgt.
-- Adgangskoder krypteres med styresystemets nøglering (DPAPI på Windows).
-- Host key-tjek med "trust on first use" og tydelig advarsel, hvis en servers nøgle ændrer sig.
-- Hurtig forbindelse: skriv `bruger@host` eller `bruger@host:2222` i søgefeltet og tryk Enter.
-- PuTTY-vaner: markér tekst for at kopiere, højreklik for at indsætte.
+- Server list with groups, search and colors. Create, edit, duplicate and delete servers from the panel on the right or by right-clicking. Double-click to connect.
+- Multiple sessions in tabs, including several to the same server (Ctrl+Shift+D). Typing `exit` closes the tab; if the connection drops, press Enter to reconnect.
+- Log in with a password, private key or SSH agent / Pageant. Keys can be OpenSSH, PEM, PKCS#8 or PuTTY .ppk (v2 and v3). If a passphrase is missing, you'll be prompted.
+- Passwords are encrypted with the operating system's keyring (DPAPI on Windows).
+- Host key checking with "trust on first use" and a clear warning if a server's key changes.
+- Quick connect: type `user@host` or `user@host:2222` in the search field and press Enter.
+- PuTTY habits: select text to copy, right-click to paste.
 
-### Filer (dual-pane, som Total Commander / mc)
+### Files (dual-pane, like Total Commander / mc)
 
-Skift mellem **Terminal** og **Filer** øverst til højre i en session, eller tryk Ctrl+Shift+F. Venstre side er denne computer, højre side er serveren. Filhåndteringen bruger sessionens forbindelse, så der skal ikke logges ind igen.
+Switch between **Terminal** and **Files** in the top right of a session, or press Ctrl+Shift+F. The left side is this computer, the right side is the server. The file manager uses the session's connection, so there's no need to log in again.
 
-| Tast | Handling |
+| Key | Action |
 |---|---|
-| Tab | Skift side |
-| Pil op/ned, PgUp/PgDn, Home/End | Flyt markøren |
-| Enter / dobbeltklik | Åbn mappe eller fil |
-| Backspace | Op ad en mappe |
-| Mellemrum / Insert | Markér og gå videre (Shift+pil markerer også) |
-| Ctrl+A / Escape | Markér alt / fjern markering |
-| Skriv bogstaver | Hop til fil, der starter sådan |
-| F2 (eller Shift+F6) | Omdøb |
-| F4 | Åbn. En serverfil åbnes i dit standardprogram og uploades automatisk, hver gang du gemmer |
-| F5 | Kopiér markerede til den anden side |
-| F6 | Flyt markerede til den anden side |
-| F7 | Ny mappe |
-| F8 / Delete | Slet (lokalt: til papirkurven) |
-| Ctrl+R / Ctrl+H | Opdatér / vis skjulte filer |
+| Tab | Switch side |
+| Up/Down, PgUp/PgDn, Home/End | Move the cursor |
+| Enter / double-click | Open folder or file |
+| Backspace | Go up one folder |
+| Space / Insert | Select and move on (Shift+arrow also selects) |
+| Ctrl+A / Escape | Select all / clear selection |
+| Type letters | Jump to a file starting with them |
+| F2 (or Shift+F6) | Rename |
+| F4 | Open. A server file opens in your default program and is uploaded automatically every time you save |
+| F5 | Copy selected to the other side |
+| F6 | Move selected to the other side |
+| F7 | New folder |
+| F8 / Delete | Delete (locally: to the Recycle Bin) |
+| Ctrl+R / Ctrl+H | Refresh / show hidden files |
 
-Træk markerede filer fra den ene side til den anden for at kopiere (hold Shift for at flytte), slip dem på en mappe for at lægge dem i den, eller træk filer ind fra Stifinder til serversiden. Findes et element allerede, kan du vælge Overskriv, Spring over eller Annullér. Overførsler vises med fremskridt og hastighed og kan annulleres. Klik på kolonneoverskrifterne for at sortere. Begge sider husker sidste mappe (serversiden pr. server).
+Drag selected files from one side to the other to copy (hold Shift to move), drop them on a folder to put them inside it, or drag files in from Explorer to the server side. If an item already exists, you can choose Overwrite, Skip or Cancel. Transfers show progress and speed and can be cancelled. Click the column headers to sort. Both sides remember the last folder (the server side per server).
 
-### Online-prik
+### Online dot
 
-Hvert kort på Hosts-siden har en prik ved navnet: grøn, når serverens SSH-port svarer, rød når den er nede eller ikke svarer, og grå mens der tjekkes. Hold musen over prikken for svartid eller fejl. Der logges ikke ind – Skal læser blot serverens SSH-hilsen – så det virker også for servere uden gemt adgangskode. Tjekket sker højst hvert 3. minut og kun mens siden er åben; har du en session åben, eller viser serverstatus allerede at serveren kører, laves intet ekstra tjek. På serveren ses det som en kort linje "Connection closed … [preauth]" i loggen.
+Each card on the Hosts page has a dot next to its name: green when the server's SSH port responds, red when it's down or not responding, and gray while checking. Hover over the dot for response time or error. No login takes place – Skal just reads the server's SSH greeting – so it also works for servers without a saved password. The check runs at most every 3 minutes and only while the page is open; if you have a session open, or server status already shows the server is running, no extra check is made. On the server it shows up as a short "Connection closed … [preauth]" line in the log.
 
-### Serverstatus
+### Server status
 
-Hosts-siden viser CPU, RAM, disk, load, oppetid og styresystem for Linux-servere og opdateres hvert 10. sekund, mens siden er åben. Hold musen over en måler for detaljer (alle diske, swap, load-gennemsnit).
+The Hosts page shows CPU, RAM, disk, load, uptime and operating system for Linux servers, refreshed every 10 seconds while the page is open. Hover over a gauge for details (all disks, swap, load averages).
 
-Har du en session åben til serveren, bruges den. Ellers holder Skal en stille baggrundsforbindelse åben, så længe siden vises; den lukkes efter 3 minutter uden brug. Baggrundsforbindelser spørger aldrig om noget, så serveren skal have gemt login (adgangskode, nøgle eller agent), og dens host-nøgle skal være godkendt ved en tidligere forbindelse. Kan slås fra med **Serverstatus** øverst på siden.
+If you have a session open to the server, it's used. Otherwise Skal keeps a quiet background connection open as long as the page is shown; it closes after 3 minutes of inactivity. Background connections never prompt for anything, so the server must have a saved login (password, key or agent), and its host key must have been accepted during an earlier connection. Can be turned off with **Server status** at the top of the page.
 
-## Sprog
+## Languages
 
-Skal findes på dansk, engelsk, tysk, fransk, italiensk, spansk og svensk. Første gang bruges Windows' sprog (engelsk, hvis det ikke er et af de syv). Skift nederst i sidebjælken – det slår igennem med det samme, også i åbne sessioner og i dialoger og fejlbeskeder.
+Skal is available in Danish, English, German, French, Italian, Spanish and Swedish. On first launch it uses the Windows language (English if it isn't one of the seven). Change it at the bottom of the sidebar – it takes effect immediately, including in open sessions, dialogs and error messages.
 
-Alle tekster ligger i `renderer/strings.js` med de syv sprog ved siden af hinanden. Et nyt sprog tilføjes ved at give hver tekst en oversættelse og tilføje sproget i `LANGS` og `LOCALES` øverst i filen.
+All strings live in `renderer/strings.js` with the seven languages side by side. To add a new language, give every string a translation and add the language to `LANGS` and `LOCALES` at the top of the file.
 
-## Genveje
+## Shortcuts
 
-| Genvej | Handling |
+| Shortcut | Action |
 |---|---|
-| Ctrl+Shift+H | Vis hosts / søgefelt |
-| Ctrl+Shift+N | Ny host |
-| Ctrl+Tab / Ctrl+Shift+Tab | Næste / forrige fane |
-| Ctrl+Shift+W | Luk fane |
-| Ctrl+Shift+D | Duplikér session |
-| Ctrl+Shift+F | Skift mellem terminal og filer |
-| Ctrl+Shift+C / V | Kopiér / indsæt |
-| Midterklik på fane | Luk fane |
+| Ctrl+Shift+H | Show hosts / search field |
+| Ctrl+Shift+N | New host |
+| Ctrl+Tab / Ctrl+Shift+Tab | Next / previous tab |
+| Ctrl+Shift+W | Close tab |
+| Ctrl+Shift+D | Duplicate session |
+| Ctrl+Shift+F | Switch between terminal and files |
+| Ctrl+Shift+C / V | Copy / paste |
+| Middle-click on tab | Close tab |
 
-## Hvor ligger data
+## Where data is stored
 
-`hosts.json` og `known_hosts.json` ligger i `%APPDATA%\Skal` (Windows), `~/Library/Application Support/skal` (macOS) eller `~/.config/skal` (Linux). Den installerede version ligger i `%LOCALAPPDATA%\Programs\skal`.
+`hosts.json` and `known_hosts.json` are stored in `%APPDATA%\Skal` (Windows), `~/Library/Application Support/skal` (macOS) or `~/.config/skal` (Linux). The installed version lives in `%LOCALAPPDATA%\Programs\skal`.
 
-## Opbygning
+## Structure
 
-- `main.js`: lager, kryptering, SSH-forbindelser og host key-tjek
-- `sftp.js`: filoverførsel og redigering af serverfiler
-- `local.js`: den lokale side af filhåndteringen
-- `metrics.js`: serverstatus
-- `ping.js`: online-prikken
-- `keyconvert.js`: læsning af PuTTY- og andre nøgleformater
-- `preload.js`: den sikre bro til brugerfladen
-- `renderer/`: brugerfladen (`renderer.js`, `commander.js`, `strings.js` med alle tekster, HTML og CSS)
+- `main.js`: storage, encryption, SSH connections and host key checking
+- `sftp.js`: file transfer and editing of server files
+- `local.js`: the local side of the file manager
+- `metrics.js`: server status
+- `ping.js`: the online dot
+- `keyconvert.js`: reading PuTTY and other key formats
+- `preload.js`: the secure bridge to the user interface
+- `renderer/`: the user interface (`renderer.js`, `commander.js`, `strings.js` with all strings, HTML and CSS)
