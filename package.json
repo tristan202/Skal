@@ -1,7 +1,7 @@
 {
   "name": "skal",
   "version": "0.3.0",
-  "description": "Skal – en lille SSH-klient med faner og redigerbar serverliste",
+  "description": "Skal – a small SSH client with tabs and an editable server list",
   "author": "Allan",
   "main": "main.js",
   "scripts": {
