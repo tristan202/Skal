@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:" />
+  <title>Skal</title>
+  <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Tekster sættes fra strings.js: data-i18n = tekst, data-i18n-html = tekst med <kbd>/<b>,
+       data-i18n-ph = placeholder, data-i18n-title = title + aria-label -->
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand"><span class="brand-mark">&gt;_</span> Skal</div>
+      <div class="search-wrap">
+        <input id="search" type="text" spellcheck="false" autocomplete="off" data-i18n-ph="search.placeholder" />
+      </div>
+      <button id="btn-new" class="btn btn-primary btn-block" data-i18n="btn.newHost"></button>
+      <nav id="host-list" aria-label="Hosts"></nav>
+      <div class="sidebar-foot">
+        <div id="foot"></div>
+        <label class="lang-pick" data-i18n-title="lang.label">
+          <span class="lang-icon" aria-hidden="true">🌐</span>
+          <select id="lang-select"></select>
+        </label>
+      </div>
+    </aside>
+
+    <main id="main">
+      <div id="tabbar" role="tablist">
+        <button class="tab tab-home active" data-id="home" data-i18n="tab.hosts" data-i18n-title="tab.hostsTitle"></button>
+        <div id="tabs"></div>
+        <div id="view-switch" class="view-switch" hidden data-i18n-title="view.title"><button data-view="terminal" data-i18n="view.terminal"></button><button data-view="files" data-i18n="view.files"></button></div>
+      </div>
+      <section id="home-view"></section>
+      <section id="terms" hidden></section>
+    </main>
+
+    <aside id="editor" class="panel" hidden>
+      <header class="panel-head">
+        <h2 id="editor-title"></h2>
+        <button class="icon-btn" id="editor-close" data-i18n-title="btn.close">✕</button>
+      </header>
+      <form id="host-form" autocomplete="off" novalidate>
+        <label><span data-i18n="field.name"></span><input name="name" data-i18n-ph="ph.name" /></label>
+        <label><span data-i18n="field.group"></span><input name="group" list="group-list" data-i18n-ph="ph.group" /></label>
+        <datalist id="group-list"></datalist>
+        <div class="row">
+          <label class="grow"><span data-i18n="field.host"></span><input name="host" data-i18n-ph="ph.host" required /></label>
+          <label class="port"><span data-i18n="field.port"></span><input name="port" type="number" min="1" max="65535" value="22" /></label>
+        </div>
+        <label><span data-i18n="field.username"></span><input name="username" placeholder="root" required /></label>
+        <label><span data-i18n="field.auth"></span>
+          <select name="authType">
+            <option value="password" data-i18n="auth.password"></option>
+            <option value="key" data-i18n="auth.key"></option>
+            <option value="agent" data-i18n="auth.agent"></option>
+          </select>
+        </label>
+
+        <div class="auth auth-password">
+          <label><span data-i18n="field.password"></span><input name="password" type="password" /></label>
+          <label class="check" id="clear-pw-wrap" hidden><input type="checkbox" name="clearPassword" /> <span data-i18n="clear.password"></span></label>
+        </div>
+        <div class="auth auth-key" hidden>
+          <label><span data-i18n="field.keyFile"></span>
+            <div class="row">
+              <input name="keyPath" class="grow" placeholder="~/.ssh/id_ed25519" />
+              <button type="button" class="btn" id="pick-key" data-i18n="btn.browse"></button>
+            </div>
+          </label>
+          <label><span data-i18n="field.passphrase"></span><input name="passphrase" type="password" /></label>
+          <p class="muted-hint" data-i18n="hint.keyFormats"></p>
+          <label class="check" id="clear-pp-wrap" hidden><input type="checkbox" name="clearPassphrase" /> <span data-i18n="clear.passphrase"></span></label>
+        </div>
+        <p class="hint" id="encrypt-hint" hidden data-i18n="hint.noKeyring"></p>
+
+        <div class="field-label" data-i18n="field.color"></div>
+        <div id="swatches" class="swatches"></div>
+        <input type="hidden" name="color" />
+
+        <p class="form-error" id="form-error" hidden></p>
+
+        <footer class="panel-foot">
+          <button type="button" class="btn btn-danger" id="btn-delete" hidden data-i18n="btn.delete"></button>
+          <span class="spacer"></span>
+          <button type="submit" class="btn" data-i18n="btn.save"></button>
+          <button type="button" class="btn btn-primary" id="btn-save-connect" data-i18n="btn.saveConnect"></button>
+        </footer>
+      </form>
+    </aside>
+  </div>
+
+  <div id="ctx" class="ctx" hidden></div>
+
+  <div id="modal" class="modal-backdrop" hidden>
+    <form class="modal" id="pw-form">
+      <h3 id="pw-title"></h3>
+      <p class="muted" id="pw-sub"></p>
+      <input type="password" id="pw-input" autocomplete="off" />
+      <label class="check" id="pw-remember-wrap"><input type="checkbox" id="pw-remember" /> <span id="pw-remember-text"></span></label>
+      <div class="modal-actions">
+        <button type="button" class="btn" id="pw-cancel" data-i18n="btn.cancel"></button>
+        <button type="submit" class="btn btn-primary" id="pw-submit"></button>
+      </div>
+    </form>
+  </div>
+
+  <script src="strings.js"></script>
+  <script src="../node_modules/@xterm/xterm/lib/xterm.js"></script>
+  <script src="../node_modules/@xterm/addon-fit/lib/addon-fit.js"></script>
+  <script src="../node_modules/@xterm/addon-unicode11/lib/addon-unicode11.js"></script>
+  <script src="commander.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
