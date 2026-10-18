@@ -3,6 +3,7 @@
   "version": "0.3.0",
   "description": "Skal – a small SSH client with tabs and an editable server list",
   "author": "Allan",
+  "license": "GPL-3.0-or-later",
   "main": "main.js",
   "scripts": {
     "start": "electron .",

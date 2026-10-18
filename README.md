@@ -96,3 +96,7 @@ All strings live in `renderer/strings.js` with the seven languages side by side.
 - `keyconvert.js`: reading PuTTY and other key formats
 - `preload.js`: the secure bridge to the user interface
 - `renderer/`: the user interface (`renderer.js`, `commander.js`, `strings.js` with all strings, HTML and CSS)
+
+## License
+
+Skal is free software, licensed under the [GNU General Public License v3.0](LICENSE) or (at your option) any later version.
