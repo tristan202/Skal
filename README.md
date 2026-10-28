@@ -2,6 +2,8 @@
 
 A small SSH client with tabs, an editable server list, file transfer and server status – inspired by Termius. Built with Electron, xterm.js and ssh2, so it doesn't depend on PuTTY.
 
+<img width="952" height="596" alt="{38E9E5EB-4A35-4912-B286-BDA0C8511E2D}" src="https://github.com/user-attachments/assets/4c48bdab-0b0c-47db-805b-fffb0c92d886" />
+
 ## Getting started
 
 Requires Node.js 18 or newer.
