@@ -427,7 +427,7 @@ function handleShortcut(e) {
   if (!(ctrl && e.shiftKey)) return false;
   switch (e.key.toLowerCase()) {
     case 'w': if (t) closeTab(t.id); return true;
-    case 'h': activate('home'); $('#search').focus(); return true;
+    case 'h': setSidebar(false); activate('home'); $('#search').focus(); return true;
     case 'd': if (t) openSession(t.host, { adhoc: !!t.adhoc, password: t.password, passphrase: t.passphrase }); return true;
     case 'c': if (t) { const s = t.term.getSelection(); if (s) api.clipWrite(s); } return true;
     case 'v': if (t) pasteInto(t); return true;
@@ -435,6 +435,12 @@ function handleShortcut(e) {
     case 'f': if (t) setView(t, t.view === 'files' ? 'terminal' : 'files'); return true;
     default: return false;
   }
+}
+
+// Terminalen tilpasser sig selv via ResizeObserver på #terms
+function setSidebar(hidden) {
+  $('#app').classList.toggle('sidebar-hidden', hidden);
+  localStorage.setItem('skal.sidebarHidden', hidden ? '1' : '0');
 }
 
 // Skift mellem terminal og fil-commander i en fane
@@ -622,6 +628,8 @@ async function loadHosts() { state.hosts = await api.listHosts(); }
 
 // ---------- Hændelser ----------
 function bindUI() {
+  setSidebar(localStorage.getItem('skal.sidebarHidden') === '1');
+  $('#sidebar-toggle').onclick = () => setSidebar(!$('#app').classList.contains('sidebar-hidden'));
   $('#btn-new').onclick = () => openEditor({});
   $('#lang-select').innerHTML = Object.entries(I18N.LANGS).map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join('');
   $('#lang-select').onchange = (e) => setLanguage(e.target.value);

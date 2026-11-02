@@ -29,6 +29,8 @@ button, input, select { font: inherit; color: inherit; }
 
 /* ---------- Sidebar ---------- */
 #sidebar { width: 260px; flex-shrink: 0; background: var(--sidebar); display: flex; flex-direction: column; border-right: 1px solid #0b0d14; }
+#app.sidebar-hidden #sidebar { display: none; }
+#sidebar-toggle { align-self: center; display: grid; }
 .brand { padding: 16px 18px 12px; font-weight: 650; font-size: 16px; letter-spacing: .2px; display: flex; align-items: center; gap: 10px; }
 .brand-mark { font-family: var(--mono); font-size: 12px; background: var(--accent); color: #fff; border-radius: 6px; padding: 2px 6px; }
 .search-wrap { padding: 0 12px 10px; }

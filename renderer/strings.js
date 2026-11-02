@@ -27,6 +27,7 @@
     'btn.overwrite': { da: 'Overskriv', en: 'Overwrite', de: 'Überschreiben', fr: 'Remplacer', it: 'Sovrascrivi', es: 'Sobrescribir', sv: 'Skriv över' },
 
     // ---------- Sidebjælke og faner ----------
+    'sidebar.toggle': { da: 'Vis/skjul sidebjælke', en: 'Show/hide sidebar', de: 'Seitenleiste ein-/ausblenden', fr: 'Afficher/masquer la barre latérale', it: 'Mostra/nascondi barra laterale', es: 'Mostrar/ocultar barra lateral', sv: 'Visa/dölj sidofält' },
     'search.placeholder': { da: 'Søg, eller skriv bruger@host', en: 'Search, or type user@host', de: 'Suchen oder benutzer@host', fr: 'Rechercher ou utilisateur@hôte', it: 'Cerca o digita utente@host', es: 'Buscar o usuario@host', sv: 'Sök eller användare@värd' },
     'btn.newHost': { da: 'Ny host', en: 'New host', de: 'Neuer Host', fr: 'Nouvel hôte', it: 'Nuovo host', es: 'Nuevo host', sv: 'Ny värd' },
     'tab.hosts': { da: 'Hosts', en: 'Hosts', de: 'Hosts', fr: 'Hôtes', it: 'Host', es: 'Hosts', sv: 'Värdar' },
