@@ -1,6 +1,6 @@
 [package]
 name = "skal"
-version = "0.3.1"
+version = "0.4.0"
 description = "Skal – a small SSH client with tabs and an editable server list"
 authors = ["Allan"]
 license = "GPL-3.0-or-later"
