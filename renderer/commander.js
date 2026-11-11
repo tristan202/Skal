@@ -8,6 +8,8 @@ const Commander = (() => {
   api.sftp.onProgress((p) => progressHandlers.get(p.id)?.(p));
   const editHandlers = new Map();     // session-id -> fn
   api.sftp.onEdited((p) => editHandlers.get(p.sid)?.(p));
+  const dropHandlers = new Set();     // filer trukket ind fra Stifinder
+  api.onFileDrop((e) => dropHandlers.forEach((fn) => fn(e)));
   let local = { home: '', sep: '\\', platform: 'win32' };
   const localReady = api.local.info().then((i) => { local = i; });
 
@@ -146,6 +148,26 @@ const Commander = (() => {
     let activeIdx = 1;
     const active = () => panes[activeIdx];
     const other = (p) => (p === panes[0] ? panes[1] : panes[0]);
+    // Siden under musen – aldrig den, der trækkes fra
+    const paneAt = (x, y, not) => panes.find((q) => q !== not && q.el.contains(document.elementFromPoint(x, y)));
+    function clearDrop() { root.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target')); }
+    function showDrop(to, x, y) {
+      clearDrop();
+      const hit = to?.dropAt(x, y);
+      if (hit) (hit.row || to.el).classList.add('drop-target');
+    }
+    // Filer fra Stifinder kan kun slippes på serversiden, og kun i den synlige fane
+    function onDrop(e) {
+      if (!root.offsetParent) return;
+      const to = paneAt(e.x, e.y, panes[0]);
+      if (e.type === 'leave') return clearDrop();
+      if (e.type !== 'drop') return showDrop(to, e.x, e.y);
+      clearDrop();
+      const hit = to?.dropAt(e.x, e.y);
+      if (hit) { setActive(to); uploadPaths(e.paths, hit.dir); }
+    }
+    dropHandlers.add(onDrop);
+
     function setActive(p) {
       activeIdx = panes.indexOf(p);
       panes.forEach((x) => x.el.classList.toggle('active', x === p));
@@ -210,7 +232,7 @@ const Commander = (() => {
         st.view = rows();
         if (!st.view.some((r) => r.name === st.cursor)) st.cursor = st.view[0]?.name ?? null;
         list.innerHTML = st.view.length ? st.view.map((r) => `
-          <div class="prow${r.isDir ? ' dir' : ''}${r.up ? ' up' : ''}${r.hidden || r.name.startsWith('.') && !r.up ? ' dim' : ''}" data-name="${esc(r.name)}" draggable="${!r.up}">
+          <div class="prow${r.isDir ? ' dir' : ''}${r.up ? ' up' : ''}${r.hidden || r.name.startsWith('.') && !r.up ? ' dim' : ''}" data-name="${esc(r.name)}">
             <span class="pn"><i class="ic ${r.up ? 'up' : r.isDir ? 'dir' : 'file'}"></i><span class="t">${esc(r.name)}</span>${r.isLink ? '<span class="ln">→</span>' : ''}</span>
             <span class="ps">${r.up ? '' : r.isDir ? `&lt;${tr('cmd.dirTag')}&gt;` : fmtSize(r.size)}</span>
             <span class="pd">${r.up || !r.mtime ? '' : fmtDate(r.mtime)}</span>
@@ -367,45 +389,36 @@ const Commander = (() => {
       list.addEventListener('keydown', (e) => { if (handleKey(p, e)) { e.preventDefault(); e.stopPropagation(); } });
 
       // ---- Træk og slip ----
-      list.addEventListener('dragstart', (e) => {
-        const r = e.target.closest('.prow');
-        if (!r || r.classList.contains('up')) return e.preventDefault();
-        if (!st.marked.has(r.dataset.name)) { st.marked.clear(); st.cursor = r.dataset.name; p.paint(); }
-        dragging = { pane: p, items: p.targets() };
-        e.dataTransfer.effectAllowed = 'copyMove';
-        e.dataTransfer.setData('text/plain', dragging.items.map((i) => i.name).join('\n'));
-      });
-      list.addEventListener('dragend', () => { dragging = null; clearDrop(); });
-      const accepts = (e) => (dragging && dragging.pane !== p) ||
-        (!dragging && src.kind === 'remote' && [...(e.dataTransfer?.types || [])].includes('Files'));
-      const dropDir = (e) => {
-        const r = e.target.closest?.('.prow');
-        const entry = r && !r.classList.contains('up') && find(r.dataset.name);
+      // Musehændelser i stedet for HTML5-træk: på Windows modtager Tauri selv filer
+      // fra Stifinder, og så virker HTML5-træk inde i vinduet ikke.
+      p.dropAt = (x, y) => {
+        if (!st.cwd || st.msg) return null;
+        const r = document.elementFromPoint(x, y)?.closest('.prow');
+        const entry = r && list.contains(r) && !r.classList.contains('up') && find(r.dataset.name);
         return { dir: entry?.isDir ? p.pathOf(entry.name) : st.cwd, row: entry?.isDir ? r : null };
       };
-      function clearDrop() { document.querySelectorAll('.drop-target').forEach((x) => x.classList.remove('drop-target')); }
-      el.addEventListener('dragover', (e) => {
-        if (!accepts(e) || !st.cwd || st.msg) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = e.shiftKey && dragging ? 'move' : 'copy';
-        clearDrop();
-        const { row } = dropDir(e);
-        (row || el).classList.add('drop-target');
-      });
-      el.addEventListener('dragleave', (e) => { if (!el.contains(e.relatedTarget)) clearDrop(); });
-      el.addEventListener('drop', (e) => {
-        if (!accepts(e)) return;
-        e.preventDefault();
-        clearDrop();
-        const { dir } = dropDir(e);
-        setActive(p);
-        if (dragging) {
-          const d = dragging; dragging = null;
-          transfer(d.pane, p, d.items, { move: e.shiftKey, dir });
-        } else {
-          const paths = [...e.dataTransfer.files].map((f) => api.pathForFile(f)).filter(Boolean);
-          uploadPaths(paths, dir);
-        }
+      list.addEventListener('mousedown', (e) => {
+        const r = e.target.closest('.prow');
+        if (e.button !== 0 || !r || r.classList.contains('up') || e.target.closest('input')) return;
+        const x0 = e.clientX, y0 = e.clientY;
+        const move = (ev) => {
+          if (!dragging) {
+            if (Math.abs(ev.clientX - x0) + Math.abs(ev.clientY - y0) < 6) return;
+            if (!st.marked.has(r.dataset.name)) { st.marked.clear(); st.cursor = r.dataset.name; p.paint(); }
+            dragging = { pane: p, items: p.targets() };
+          }
+          showDrop(paneAt(ev.clientX, ev.clientY, p), ev.clientX, ev.clientY);
+        };
+        const up = (ev) => {
+          removeEventListener('mousemove', move);
+          removeEventListener('mouseup', up);
+          const d = dragging; dragging = null; clearDrop();
+          const to = d && paneAt(ev.clientX, ev.clientY, p);
+          const hit = to?.dropAt(ev.clientX, ev.clientY);
+          if (hit) { setActive(to); transfer(p, to, d.items, { move: ev.shiftKey, dir: hit.dir }); }
+        };
+        addEventListener('mousemove', move);
+        addEventListener('mouseup', up);
       });
 
       panesEl.appendChild(el);
@@ -644,7 +657,7 @@ const Commander = (() => {
       relabel() { panes.forEach((p) => p.render()); }, // statiske tekster klares af applyI18n
       onConnected() { if (started) { const r = panes[1]; r.st.cwd ? r.load(r.st.cwd, r.st.cursor) : r.init(); } },
       onDisconnected() { if (started) panes[1].disconnected(); },
-      dispose() { editHandlers.delete(sid); api.sftp.stopEdits(sid); },
+      dispose() { editHandlers.delete(sid); dropHandlers.delete(onDrop); api.sftp.stopEdits(sid); },
     };
   }
 

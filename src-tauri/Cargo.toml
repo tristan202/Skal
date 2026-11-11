@@ -1,0 +1,40 @@
+[package]
+name = "skal"
+version = "0.3.1"
+description = "Skal – a small SSH client with tabs and an editable server list"
+authors = ["Allan"]
+license = "GPL-3.0-or-later"
+edition = "2021"
+
+[lib]
+name = "skal_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["full"] }
+russh = { version = "0.65", default-features = false, features = ["ring", "rsa", "flate2"] }
+russh-sftp = "3"
+base64 = "0.22"
+uuid = { version = "1", features = ["v4"] }
+dirs = "6"
+notify = "8"
+trash = "5"
+aes-gcm = "0.10"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Security_Cryptography", "Win32_Foundation", "Win32_Storage_FileSystem"] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

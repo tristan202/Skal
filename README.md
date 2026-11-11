@@ -1,34 +1,31 @@
 # Skal
 
-A small SSH client with tabs, an editable server list, file transfer and server status – inspired by Termius. Built with Electron, xterm.js and ssh2, so it doesn't depend on PuTTY.
+A small SSH client with tabs, an editable server list, file transfer and server status – inspired by Termius. Built with Tauri, xterm.js and russh, so it doesn't depend on PuTTY – and the installer is small.
 
 <img width="952" height="596" alt="{38E9E5EB-4A35-4912-B286-BDA0C8511E2D}" src="https://github.com/user-attachments/assets/4c48bdab-0b0c-47db-805b-fffb0c92d886" /><img width="952" height="596" alt="{12DACB85-8B44-4010-89D8-B888C5C0824E}" src="https://github.com/user-attachments/assets/19458528-97f9-466c-b195-cb9a126e3c3e" />
 
 
 ## Getting started
 
-Requires Node.js 18 or newer.
+Requires Node.js 18 or newer and Rust (stable) with the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/).
 
 ```
 npm install
 npm start
 ```
 
-Build an installable app:
+Build the Windows installer (ends up in `src-tauri/target/release/bundle/nsis`):
 
 ```
-npm run dist:win        # Windows installer (recommended – starts quickly)
-npm run dist:zip        # Windows: zip that can be extracted and run directly
-npm run dist:portable   # Windows: a single portable .exe (starts slowly)
-npm run dist            # current platform
+npm run dist
 ```
 
 ## Features
 
 - Server list with groups, search and colors. Create, edit, duplicate and delete servers from the panel on the right or by right-clicking. Double-click to connect.
 - Multiple sessions in tabs, including several to the same server (Ctrl+Shift+D). Typing `exit` closes the tab; if the connection drops, press Enter to reconnect.
-- Log in with a password, private key or SSH agent / Pageant. Keys can be OpenSSH, PEM, PKCS#8 or PuTTY .ppk (v2 and v3). If a passphrase is missing, you'll be prompted.
-- Passwords are encrypted with the operating system's keyring (DPAPI on Windows).
+- Log in with a password, private key or SSH agent (Pageant or the Windows OpenSSH agent). Keys can be OpenSSH, PEM, PKCS#8 or PuTTY .ppk (v2 and v3). If a passphrase is missing, you'll be prompted.
+- Passwords are encrypted with Windows' DPAPI, tied to your user account. Passwords saved by the old Electron version are converted automatically.
 - Host key checking with "trust on first use" and a clear warning if a server's key changes.
 - Quick connect: type `user@host` or `user@host:2222` in the search field and press Enter.
 - PuTTY habits: select text to copy, right-click to paste.
@@ -87,18 +84,18 @@ All strings live in `renderer/strings.js` with the seven languages side by side.
 
 ## Where data is stored
 
-`hosts.json` and `known_hosts.json` are stored in `%APPDATA%\Skal` (Windows), `~/Library/Application Support/skal` (macOS) or `~/.config/skal` (Linux). The installed version lives in `%LOCALAPPDATA%\Programs\skal`.
+`hosts.json` and `known_hosts.json` are stored in `%APPDATA%\Skal`. The installed version lives in `%LOCALAPPDATA%\Skal`.
 
 ## Structure
 
-- `main.js`: storage, encryption, SSH connections and host key checking
-- `sftp.js`: file transfer and editing of server files
-- `local.js`: the local side of the file manager
-- `metrics.js`: server status
-- `ping.js`: the online dot
-- `keyconvert.js`: reading PuTTY and other key formats
-- `preload.js`: the secure bridge to the user interface
-- `renderer/`: the user interface (`renderer.js`, `commander.js`, `strings.js` with all strings, HTML and CSS)
+- `src-tauri/src/`: the Rust backend
+  - `lib.rs`: app setup and the host list
+  - `store.rs`: storage and password encryption
+  - `ssh.rs`: SSH connections, login, host key checking and terminal sessions
+  - `sftp.rs`: file transfer and editing of server files
+  - `local.rs`: the local side of the file manager
+  - `status.rs`: server status and the online dot
+- `renderer/`: the user interface (`api.js` is the bridge to the backend; `renderer.js`, `commander.js`, `strings.js` with all strings, HTML and CSS)
 
 ## License
 
