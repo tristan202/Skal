@@ -20,6 +20,8 @@ const state = {
   metrics: {},       // hostId -> seneste serverstatus
   ping: {},          // hostId -> svarer SSH-porten?
   metricsOn: localStorage.getItem('skal.metrics') !== '0',
+  alertsOn: localStorage.getItem('skal.alerts') === '1',
+  snippets: [],      // [{ name, cmd, run }]
 };
 
 const termTheme = {
@@ -113,15 +115,19 @@ function renderHome() {
       <h2>${tr('home.emptyTitle')}</h2>
       <p>${tr('home.emptyText')}</p>
       <button class="btn btn-primary" data-action="new">${tr('home.addHost')}</button>
+      <button class="btn" data-action="import">${tr('imp.btn')}</button>
     </div>`;
     return;
   }
   const list = filteredHosts();
   let html = `<div class="home-head"><h1>${tr('home.title')}</h1><span class="muted">${tr('home.count', { n: list.length, total: state.hosts.length })}</span>
     <label class="switch" title="${esc(tr('metrics.toggleTitle'))}">
-      <input type="checkbox" id="metrics-toggle" ${state.metricsOn ? 'checked' : ''}/> ${tr('metrics.toggle')}</label></div>`;
+      <input type="checkbox" id="metrics-toggle" ${state.metricsOn ? 'checked' : ''}/> ${tr('metrics.toggle')}</label>
+    <label class="switch" title="${esc(tr('alerts.toggleTitle'))}">
+      <input type="checkbox" id="alerts-toggle" ${state.alertsOn ? 'checked' : ''}/> ${tr('alerts.toggle')}</label>
+    <button class="btn btn-sm" data-action="import">${tr('imp.btn')}</button></div>`;
   for (const [g, hosts] of grouped(list)) {
-    html += `<div class="home-group">${esc(g || tr('group.none'))}</div><div class="grid">`;
+    html += `<div class="home-group" data-group="${esc(g)}">${esc(g || tr('group.none'))}</div><div class="grid">`;
     for (const h of hosts) {
       html += `<div class="card ${state.selected === h.id ? 'selected' : ''}" data-id="${h.id}" tabindex="0" role="button" title="${esc(tr('host.dblclick'))}">
         ${avatar(h, 'lg')}
@@ -139,6 +145,9 @@ function renderHome() {
     <kbd>${cs}W</kbd><span>${tr('keys.closeTab')}</span>
     <kbd>${cs}D</kbd><span>${tr('keys.dupSession')}</span>
     <kbd>${cs}F</kbd><span>${tr('keys.toggleView')}</span>
+    <kbd>${cs}E</kbd><span>${tr('keys.split')}</span>
+    <kbd>${cs}S</kbd><span>${tr('snip.name')}</span>
+    <kbd>${cs}B</kbd><span>${tr('keys.broadcast')}</span>
     <kbd>${cs}C / V</kbd><span>${tr('keys.copyPaste')}</span>
     <kbd>${tr('keys.rightClick')}</kbd><span>${tr('keys.paste')}</span>
   </div>`;
@@ -196,14 +205,17 @@ function updatePingDom(id) {
   const el = document.querySelector(`[data-ping="${id}"]`);
   if (el) el.outerHTML = pingDot(id);
 }
+// Med advarsler slået til tjekkes alle servere også, når siden ikke vises (højst hvert minut)
+const inBackground = () => state.active !== 'home' || document.hidden;
 const pingBusy = new Set(), pingAt = {};
 function pollPing(force) {
-  if (state.active !== 'home' || document.hidden) return;
-  for (const h of filteredHosts()) {
-    if (state.metricsOn && state.metrics[h.id]?.ok) continue; // serverstatus viser det allerede
+  const bg = inBackground();
+  if (bg && !state.alertsOn) return;
+  for (const h of bg ? state.hosts : filteredHosts()) {
+    if ((state.metricsOn || state.alertsOn) && state.metrics[h.id]?.ok) continue; // serverstatus viser det allerede
     if (pingBusy.has(h.id) || (!force && Date.now() - (pingAt[h.id] || 0) < 180000)) continue;
     pingBusy.add(h.id);
-    api.ping([h.id]).then((r) => { Object.assign(state.ping, r); updatePingDom(h.id); })
+    api.ping([h.id]).then((r) => { Object.assign(state.ping, r); updatePingDom(h.id); checkAlerts(h); })
       .catch(() => {}).finally(() => { pingBusy.delete(h.id); pingAt[h.id] = Date.now(); });
   }
 }
@@ -213,37 +225,80 @@ setInterval(() => pollPing(false), 5000);
 // holder de andre tilbage. En server spørges højst hvert 10. sekund.
 const metricsBusy = new Set(), metricsAt = {};
 function pollMetrics(force) {
-  if (!state.metricsOn || state.active !== 'home' || document.hidden) return;
-  for (const h of filteredHosts()) {
-    if (metricsBusy.has(h.id) || (!force && Date.now() - (metricsAt[h.id] || 0) < 10000)) continue;
+  const bg = inBackground();
+  if (bg ? !state.alertsOn : !(state.metricsOn || state.alertsOn)) return;
+  const every = state.metricsOn && !bg ? 10000 : 60000;
+  for (const h of bg ? state.hosts : filteredHosts()) {
+    if (metricsBusy.has(h.id) || (!force && Date.now() - (metricsAt[h.id] || 0) < every)) continue;
     metricsBusy.add(h.id);
     api.metrics([h.id]).then((r) => {
       Object.assign(state.metrics, r);
       const el = document.querySelector(`[data-metrics="${h.id}"]`);
       if (el) el.innerHTML = metricsHtml(state.metrics[h.id]);
       updatePingDom(h.id);
+      checkAlerts(h);
       if (!state.metrics[h.id]?.ok) pollPing(false); // serverstatus fejler: lad SSH-tjekket afgøre prikken
     }).catch(() => {}).finally(() => { metricsBusy.delete(h.id); metricsAt[h.id] = Date.now(); });
   }
 }
 setInterval(() => pollMetrics(false), 2000);
 
+// ---------- Advarsler ----------
+// Der meldes kun om ændringer: offline/online igen, en disk der passerer 90 %, og
+// høj load (5-minutters gennemsnit over 1,5 pr. kerne). Første måling giver ingen besked.
+const alertState = {};
+function checkAlerts(h) {
+  if (!state.alertsOn) return;
+  const m = state.metrics[h.id], p = state.ping[h.id];
+  const a = alertState[h.id] || (alertState[h.id] = { online: undefined, disks: new Set(), load: false });
+  const name = label(h);
+  const online = m?.ok ? true : p ? p.ok : undefined;
+  if (online !== undefined) {
+    if (a.online === true && !online) api.notify(tr('al.offline', { name }), sub(h));
+    if (a.online === false && online) api.notify(tr('al.online', { name }), sub(h));
+    a.online = online;
+  }
+  if (!m?.ok) return;
+  for (const d of m.disks) {
+    if (d.pct >= 90 && !a.disks.has(d.mount)) { a.disks.add(d.mount); api.notify(tr('al.disk', { name, mount: d.mount, p: Math.round(d.pct) }), sub(h)); }
+    if (d.pct < 85) a.disks.delete(d.mount);
+  }
+  const load5 = m.load[1] || 0;
+  if (!a.load && load5 >= m.ncpu * 1.5) { a.load = true; api.notify(tr('al.load', { name, l: load5, n: m.ncpu }), sub(h)); }
+  if (load5 < m.ncpu) a.load = false;
+}
+
+// Faner, der vises lige nu: den aktive og evt. dens partner i delt skærm
+function shownTabs() {
+  const at = getTab(state.active);
+  const p = at?.partner && getTab(at.partner);
+  return p ? state.tabs.filter((t) => t === at || t === p) : at ? [at] : [];
+}
 function renderTabs() {
   const counts = {};
+  const shown = new Set(shownTabs().map((t) => t.id));
   $('#tabs').innerHTML = state.tabs.map((t) => {
     counts[t.title] = (counts[t.title] || 0) + 1;
     const n = counts[t.title] > 1 ? ` (${counts[t.title]})` : '';
-    return `<button class="tab ${state.active === t.id ? 'active' : ''}" data-id="${t.id}" role="tab" title="${esc(sub(t.host))}">
-      <span class="status ${t.status}"></span><span class="title">${esc(t.title + n)}</span>
+    const cls = state.active === t.id ? 'active' : shown.has(t.id) ? 'paired' : '';
+    return `<button class="tab ${cls}" data-id="${t.id}" role="tab" title="${esc(sub(t.host))}">
+      <span class="status ${t.status}"></span>${t.broadcast ? `<span class="bc" title="${esc(tr('bc.tabTitle'))}">⇶</span>` : ''}<span class="title">${esc(t.title + n)}</span>
       <span class="close" data-close="${t.id}" title="${esc(tr('tab.closeTitle'))}">✕</span>
     </button>`;
   }).join('');
   $('.tab-home').classList.toggle('active', state.active === 'home');
   $('#home-view').hidden = state.active !== 'home';
   $('#terms').hidden = state.active === 'home';
-  for (const t of state.tabs) t.el.classList.toggle('active', t.id === state.active);
+  for (const t of state.tabs) {
+    t.el.classList.toggle('active', shown.has(t.id));
+    t.el.classList.toggle('current', t.id === state.active);
+    t.el.classList.toggle('bc', !!t.broadcast);
+    t.el.style.order = state.tabs.indexOf(t);
+  }
+  $('#terms').classList.toggle('split', shown.size > 1);
   const at = getTab(state.active);
   $('#view-switch').hidden = !at;
+  $('#snip-btn').hidden = !at;
   $('#view-switch').querySelectorAll('[data-view]').forEach((b) => b.classList.toggle('on', b.dataset.view === (at?.view || 'terminal')));
   renderSidebar(); // live-prikker
 }
@@ -254,6 +309,7 @@ function activate(id) {
   renderTabs();
   if (id === 'home') { pollMetrics(false); pollPing(false); }
   const t = getTab(id);
+  for (const x of shownTabs()) if (x !== t && x.view !== 'files') waitForFit(x);
   if (t?.view === 'files') t.cmd.focus();
   else if (t) { t.term?.focus(); waitForFit(t); }
 }
@@ -276,14 +332,15 @@ function fitTab(t) {
   }
   return true;
 }
-function fitActive() { fitTab(getTab(state.active)); }
+function fitActive() { shownTabs().forEach(fitTab); }
 // Næste skærmopdatering – men højst 50 ms, så intet hænger, hvis vinduet er minimeret
 const nextFrame = () => new Promise((r) => { requestAnimationFrame(r); setTimeout(r, 50); });
 async function waitForFit(t) {
   for (let i = 0; i < 30; i++) { await nextFrame(); if (fitTab(t)) return; }
 }
 
-async function openSession(host, { adhoc = false, password, passphrase } = {}) {
+// run: kommando der skrives, når forbindelsen er oppe · splitWith: vis ved siden af denne fane
+async function openSession(host, { adhoc = false, password, passphrase, run, splitWith, broadcast } = {}) {
   if (password === undefined && (host.authType || 'password') === 'password' && !host.hasPassword) {
     const r = await promptPassword(host, !adhoc && state.canEncrypt);
     if (r === null) return;
@@ -308,7 +365,9 @@ async function openSession(host, { adhoc = false, password, passphrase } = {}) {
 
   // Fanen gøres synlig FØR terminalen åbnes, så xterm kan måle fonten korrekt.
   // (Ellers måler den 0, og serveren får standardbredden 80 kolonner.)
-  const tab = { id, host, hostId: adhoc ? null : host.id, adhoc: adhoc ? host : null, title: label(host), term: null, fit: null, el, box, wrap, view: 'terminal', status: 'connecting', password, passphrase };
+  const tab = { id, host, hostId: adhoc ? null : host.id, adhoc: adhoc ? host : null, title: label(host), term: null, fit: null, el, box, wrap, view: 'terminal', status: 'connecting', password, passphrase, run, broadcast: !!broadcast };
+  const other = splitWith && getTab(splitWith);
+  if (other) { unsplit(other); tab.partner = other.id; other.partner = id; }
   // Fil-commanderen (lokal | server) – en alternativ visning i samme fane
   tab.cmd = Commander.create(tab, {
     writeToTerminal: (d) => { if (tab.status === 'connected') api.write(id, d); },
@@ -318,7 +377,7 @@ async function openSession(host, { adhoc = false, password, passphrase } = {}) {
   el.appendChild(tab.cmd.el);
   applyI18n(tab.cmd.el); // oversæt commanderens faste tekster
   // Tilpas terminalen, når dens plads ændrer sig
-  tab.ro = new ResizeObserver(() => { if (state.active === id) requestAnimationFrame(() => fitTab(tab)); });
+  tab.ro = new ResizeObserver(() => { if (el.classList.contains('active')) requestAnimationFrame(() => fitTab(tab)); });
   tab.ro.observe(wrap);
   state.tabs.push(tab);
   state.active = id;
@@ -338,11 +397,13 @@ async function openSession(host, { adhoc = false, password, passphrase } = {}) {
   term.loadAddon(new Unicode11Addon.Unicode11Addon());
   term.unicode.activeVersion = '11';
   term.open(wrap);
+  // I delt skærm følger den aktive fane den terminal, man klikker i
+  term.textarea?.addEventListener('focus', () => { if (state.active !== id && getTab(id)) { state.active = id; renderTabs(); } });
   tab.term = term;
   tab.fit = fit;
 
   term.onData((d) => {
-    if (tab.status === 'connected') api.write(id, d);
+    if (tab.status === 'connected') sendInput(tab, d);
     else if (tab.status === 'closed' && (d === '\r' || d === '\n')) connect(tab);
   });
   term.onResize(({ cols, rows }) => { if (tab.status === 'connected') api.resize(id, cols, rows); });
@@ -369,6 +430,7 @@ async function connect(tab) {
     fitTab(tab);
     api.resize(tab.id, tab.term.cols, tab.term.rows);
     tab.cmd.onConnected();
+    if (tab.run) { api.write(tab.id, tab.run + '\r'); tab.run = null; }
   } catch (e) {
     if (!getTab(tab.id)) return;
     const code = errCode(e);
@@ -396,6 +458,7 @@ function closeTab(id) {
   const i = state.tabs.findIndex((t) => t.id === id);
   if (i < 0) return;
   const [t] = state.tabs.splice(i, 1);
+  unsplit(t);
   api.disconnect(id);
   t.ro?.disconnect();
   t.cmd.dispose();
@@ -405,6 +468,25 @@ function closeTab(id) {
     const next = state.tabs[i] || state.tabs[i - 1];
     activate(next ? next.id : 'home');
   } else renderTabs();
+}
+
+function unsplit(t) {
+  const p = t.partner && getTab(t.partner);
+  if (p) p.partner = null;
+  t.partner = null;
+}
+function splitTab(t) {
+  openSession(t.host, { adhoc: !!t.adhoc, password: t.password, passphrase: t.passphrase, splitWith: t.id });
+}
+
+// Tastetryk går til fanen selv – eller til alle faner med "skriv til flere faner" slået til
+function sendInput(tab, d) {
+  const targets = tab.broadcast ? state.tabs.filter((x) => x.broadcast) : [tab];
+  for (const x of targets) if (x.status === 'connected') api.write(x.id, d);
+}
+function setBroadcast(tabs, on) {
+  for (const t of tabs) t.broadcast = on;
+  renderTabs();
 }
 
 function cycleTab(dir) {
@@ -433,6 +515,9 @@ function handleShortcut(e) {
     case 'v': if (t) pasteInto(t); return true;
     case 'n': openEditor({}); return true;
     case 'f': if (t) setView(t, t.view === 'files' ? 'terminal' : 'files'); return true;
+    case 'e': if (t) splitTab(t); return true;
+    case 's': if (t) snippetMenu(t); return true;
+    case 'b': if (t) setBroadcast([t], !t.broadcast); return true;
     default: return false;
   }
 }
@@ -564,8 +649,21 @@ function hostCtx(e, h) {
     { label: tr('btn.edit'), run: () => openEditor(h) },
     { label: tr('ctx.duplicate'), run: async () => { const c = await api.duplicateHost(h.id); await loadHosts(); render(); if (c) openEditor(state.hosts.find((x) => x.id === c.id)); } },
     { label: tr('ctx.copyAddress'), run: () => api.clipWrite(sub(h)) },
+    { label: tr('ctx.moveGroup'), run: () => moveToGroup(h) },
+    { label: `${tr('ctx.actions')} ›`, run: () => showCtx(e.clientX, e.clientY, quickMenu(h, () => hostCtx(e, h))) },
+    ...(h.authType !== 'key' ? [{ label: tr('ctx.keySetup'), run: () => setupKey(h) }] : []),
     '-',
     { label: tr('btn.delete'), danger: true, run: () => deleteHost(h) },
+  ]);
+}
+function groupCtx(e, g) {
+  e.preventDefault();
+  const hosts = filteredHosts().filter((h) => (h.group || NO_GROUP) === g);
+  const all = async (broadcast) => { for (const h of hosts) await openSession(h, { broadcast }); };
+  showCtx(e.clientX, e.clientY, [
+    { label: tr('ctx.connectGroup'), run: () => all(false) },
+    { label: tr('ctx.connectGroupBc'), run: () => all(true) },
+    ...(g !== NO_GROUP ? ['-', { label: tr('ctx.renameGroup'), run: () => renameGroup(g) }] : []),
   ]);
 }
 function tabCtx(e, t) {
@@ -574,11 +672,173 @@ function tabCtx(e, t) {
     { label: tr('ctx.reconnect'), run: () => { api.disconnect(t.id); t.status = 'closed'; connect(t); } },
     { label: t.view === 'files' ? tr('ctx.showTerminal') : tr('ctx.showFiles'), run: () => { activate(t.id); setView(t, t.view === 'files' ? 'terminal' : 'files'); } },
     { label: tr('keys.dupSession'), run: () => openSession(t.host, { adhoc: !!t.adhoc, password: t.password, passphrase: t.passphrase }) },
+    t.partner ? { label: tr('ctx.unsplit'), run: () => { unsplit(t); renderTabs(); fitActive(); } } : { label: tr('ctx.split'), run: () => splitTab(t) },
+    '-',
+    { label: `${t.broadcast ? '✓ ' : ''}${tr('ctx.broadcast')}`, run: () => setBroadcast([t], !t.broadcast) },
+    { label: tr('ctx.broadcastAll'), run: () => setBroadcast(state.tabs, true) },
+    ...(state.tabs.some((x) => x.broadcast) ? [{ label: tr('ctx.broadcastOff'), run: () => setBroadcast(state.tabs, false) }] : []),
     ...(t.hostId ? [{ label: tr('ctx.editHost'), run: () => { const h = state.hosts.find((x) => x.id === t.hostId); if (h) openEditor(h); } }] : []),
     '-',
     { label: tr('ctx.closeOthers'), run: () => state.tabs.filter((x) => x.id !== t.id).forEach((x) => closeTab(x.id)) },
     { label: tr('btn.close'), danger: true, run: () => closeTab(t.id) },
   ]);
+}
+
+// ---------- Dialog og beskeder ----------
+// Viser en dialog og giver formularen tilbage ved OK, null ved Annullér/Escape
+function dialog({ title, sub: subText = '', body = '', ok = tr('btn.ok'), cancel = tr('btn.cancel'), wide = false }) {
+  const m = $('#dlg'), f = $('#dlg-form');
+  f.className = `modal${wide ? ' wide' : ''}`;
+  f.innerHTML = `<h3>${esc(title)}</h3>${subText ? `<p class="muted">${esc(subText)}</p>` : ''}<div class="dlg-body">${body}</div>
+    <div class="modal-actions">${cancel ? `<button type="button" class="btn" data-x>${esc(cancel)}</button>` : ''}<button type="submit" class="btn btn-primary">${esc(ok)}</button></div>`;
+  m.hidden = false;
+  (f.querySelector('.dlg-body input:not([type=checkbox]), .dlg-body textarea') || f.querySelector('[type=submit]')).focus();
+  return new Promise((resolve) => {
+    const done = (v) => { m.hidden = true; f.onsubmit = null; m.onkeydown = null; resolve(v); };
+    f.onsubmit = (e) => { e.preventDefault(); done(f); };
+    f.querySelector('[data-x]')?.addEventListener('click', () => done(null));
+    m.onkeydown = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(null); } };
+  });
+}
+function toast(text, kind = '', ms = 6000) {
+  const el = document.createElement('div');
+  el.className = `cmd-toast ${kind}`;
+  el.textContent = text;
+  $('#toasts').appendChild(el);
+  if (ms) setTimeout(() => el.remove(), ms);
+  return el;
+}
+
+// ---------- Grupper ----------
+const groupInput = (value) => `<input name="group" list="group-list" value="${esc(value)}" placeholder="${esc(tr('grp.emptyHint'))}" />`;
+async function moveToGroup(h) {
+  const f = await dialog({ title: tr('grp.moveTitle', { name: label(h) }), body: groupInput(h.group || '') });
+  if (!f) return;
+  await api.saveHost({ ...h, group: f.elements.group.value.trim() });
+  await loadHosts(); render();
+}
+async function renameGroup(g) {
+  const f = await dialog({ title: tr('grp.renameTitle', { name: g }), body: groupInput(g) });
+  const to = f?.elements.group.value.trim();
+  if (!f || to === g) return;
+  for (const h of state.hosts.filter((x) => x.group === g)) await api.saveHost({ ...h, group: to });
+  await loadHosts(); render();
+}
+
+// ---------- Import fra ~/.ssh/config og PuTTY ----------
+async function importHosts() {
+  const found = await api.importScan();
+  if (!found.length) return toast(tr('imp.none'));
+  const rows = found.map((h, i) => `<label class="imp-row"><input type="checkbox" name="i${i}" ${h.exists ? '' : 'checked'} />
+    <span class="grow"><b>${esc(label(h))}</b> <span class="muted">${esc(sub(h))}${h.exists ? ` · ${esc(tr('imp.exists'))}` : ''}</span></span>
+    <span class="tag">${h.source === 'putty' ? 'PuTTY' : 'ssh config'}</span></label>`).join('');
+  const f = await dialog({
+    title: tr('imp.title'), sub: tr('imp.sub'), ok: tr('imp.go'), wide: true,
+    body: `<div class="imp-list">${rows}</div><label class="field">${esc(tr('field.group'))}${groupInput('')}</label>`,
+  });
+  if (!f) return;
+  const group = f.elements.group.value.trim();
+  const items = found.filter((_, i) => f.elements[`i${i}`].checked).map((h) => ({ ...h, group }));
+  if (!items.length) return;
+  const n = await api.importHosts(items);
+  await loadHosts(); render();
+  toast(tr('imp.done', { n }), 'ok');
+}
+
+// ---------- Login med SSH-nøgle ----------
+async function setupKey(h) {
+  if (!await dialog({ title: tr('key.title'), sub: tr('key.confirm', { name: label(h) }), ok: tr('key.go') })) return;
+  let password;
+  if ((h.authType || 'password') === 'password' && !h.hasPassword) {
+    const r = await promptPassword(h, false);
+    if (r === null) return;
+    password = r.password;
+  }
+  const busy = toast(tr('key.working', { name: label(h) }), '', 0);
+  try {
+    const r = await api.keySetup(h.id, password);
+    toast(`${tr('key.done', { name: label(h), path: r.keyPath })}${r.created ? ' ' + tr('key.created') : ''}`, 'ok', 12000);
+    await loadHosts(); render();
+  } catch (e) {
+    toast(cleanErr(e), 'error', 12000);
+  } finally { busy.remove(); }
+}
+
+// ---------- Hurtige handlinger og snippets ----------
+const QUICK = [
+  ['qa.top', 'htop 2>/dev/null || top'],
+  ['qa.logs', 'journalctl -f -n 100'],
+  ['qa.docker', 'docker ps -a'],
+  ['qa.disk', 'df -h -x tmpfs -x devtmpfs'],
+  ['qa.update', 'if command -v apt >/dev/null; then sudo apt update && sudo apt upgrade; else sudo dnf upgrade; fi'],
+  ['qa.reboot', 'sudo reboot', true],
+];
+// Hver handling åbner en ny fane og kører kommandoen dér, så sudo-adgangskode m.m. virker
+function quickMenu(h, back) {
+  const run = (cmd) => openSession(h, { run: cmd });
+  return [
+    { label: tr('ctx.back'), run: back }, '-',
+    ...QUICK.map(([k, cmd, ask]) => ({
+      label: tr(k), danger: ask,
+      run: async () => { if (!ask || await dialog({ title: tr('qa.rebootConfirm', { name: label(h) }), ok: tr('qa.reboot') })) run(cmd); },
+    })),
+    ...(state.snippets.length ? ['-', ...state.snippets.map((s) => ({ label: s.name || s.cmd, run: () => run(s.cmd) }))] : []),
+  ];
+}
+function snippetMenu(t) {
+  const r = $('#snip-btn').getBoundingClientRect();
+  showCtx(r.left, r.bottom + 4, [
+    ...(state.snippets.length
+      ? state.snippets.map((s) => ({ label: s.name || s.cmd, run: () => { sendInput(t, s.cmd + (s.run ? '\r' : '')); t.term.focus(); } }))
+      : [{ label: tr('snip.empty'), run: () => {} }]),
+    '-',
+    { label: tr('snip.manage'), run: editSnippets },
+  ]);
+}
+async function editSnippets() {
+  const row = (s = {}) => `<div class="snip-row"><input name="name" value="${esc(s.name || '')}" placeholder="${esc(tr('snip.label'))}" />
+    <input name="cmd" class="mono" value="${esc(s.cmd || '')}" placeholder="${esc(tr('snip.cmd'))}" />
+    <label class="check" title="${esc(tr('snip.runTitle'))}"><input type="checkbox" name="run" ${s.run ? 'checked' : ''} /> ${esc(tr('snip.run'))}</label>
+    <button type="button" class="icon-btn" data-del aria-label="${esc(tr('btn.delete'))}">✕</button></div>`;
+  const p = dialog({
+    title: tr('snip.name'), sub: tr('snip.sub'), ok: tr('btn.save'), wide: true,
+    body: `<div class="snip-list">${state.snippets.map(row).join('')}</div><button type="button" class="btn" data-add>${esc(tr('snip.add'))}</button>`,
+  });
+  const form = $('#dlg-form'), list = form.querySelector('.snip-list');
+  if (!state.snippets.length) list.insertAdjacentHTML('beforeend', row());
+  form.onclick = (e) => {
+    if (e.target.closest('[data-add]')) { list.insertAdjacentHTML('beforeend', row()); list.lastElementChild.querySelector('input').focus(); }
+    e.target.closest('[data-del]')?.closest('.snip-row').remove();
+  };
+  const f = await p;
+  form.onclick = null;
+  if (!f) return;
+  state.snippets = [...f.querySelectorAll('.snip-row')]
+    .map((r) => ({ name: r.querySelector('[name=name]').value.trim(), cmd: r.querySelector('[name=cmd]').value, run: r.querySelector('[name=run]').checked }))
+    .filter((s) => s.cmd.trim());
+  await api.snippetsSet(state.snippets);
+}
+
+// ---------- Opdatering ----------
+let updateAsked = false;
+async function checkForUpdate() {
+  if (updateAsked) return;
+  const u = await api.checkUpdate();
+  if (!u) return;
+  updateAsked = true;
+  if (!await dialog({ title: tr('upd.title', { v: u.version }), sub: tr('upd.text'), ok: tr('upd.go'), cancel: tr('upd.later') })) return;
+  const t = toast(tr('upd.loading', { p: 0 }), '', 0);
+  let total = 0, got = 0;
+  try {
+    // Windows-installeren lukker Skal, opdaterer og starter den igen
+    await u.downloadAndInstall((ev) => {
+      if (ev.event === 'Started') total = ev.data.contentLength || 0;
+      if (ev.event === 'Progress') { got += ev.data.chunkLength; t.textContent = tr('upd.loading', { p: total ? Math.round(got / total * 100) : '…' }); }
+    });
+  } catch (e) {
+    t.remove();
+    toast(tr('upd.failed', { err: cleanErr(e) }), 'error', 12000);
+  }
 }
 
 // ---------- Markering og dobbeltklik ----------
@@ -679,16 +939,26 @@ function bindUI() {
     const h = hostFromEvent(e); if (h) clickHost(h);
   };
   list.onkeydown = (e) => { if (e.key === 'Enter') { const h = hostFromEvent(e); if (h) openSession(h); } };
-  list.oncontextmenu = (e) => { const h = hostFromEvent(e); if (h) hostCtx(e, h); };
+  list.oncontextmenu = (e) => {
+    const g = e.target.closest('.group-head');
+    if (g) return groupCtx(e, g.dataset.group);
+    const h = hostFromEvent(e); if (h) hostCtx(e, h);
+  };
 
   const home = $('#home-view');
   home.onclick = (e) => {
     if (e.target.closest('[data-action="new"]')) return openEditor({});
+    if (e.target.closest('[data-action="import"]')) return importHosts();
     if (editFromEvent(e)) return;
     const h = hostFromEvent(e); if (h) clickHost(h);
   };
   home.onkeydown = (e) => { if (e.key === 'Enter' && e.target.classList.contains('card')) { const h = hostFromEvent(e); if (h) openSession(h); } };
-  home.oncontextmenu = (e) => { const h = hostFromEvent(e); if (h) hostCtx(e, h); };
+  home.oncontextmenu = (e) => {
+    const g = e.target.closest('.home-group');
+    if (g) return groupCtx(e, g.dataset.group);
+    const h = hostFromEvent(e); if (h) hostCtx(e, h);
+  };
+  $('#snip-btn').onclick = () => { const t = getTab(state.active); if (t) snippetMenu(t); };
 
   const tabbar = $('#tabbar');
   tabbar.onclick = (e) => {
@@ -707,6 +977,12 @@ function bindUI() {
   document.addEventListener('dragover', (e) => e.preventDefault());
   document.addEventListener('drop', (e) => e.preventDefault());
   $('#home-view').addEventListener('change', (e) => {
+    if (e.target.id === 'alerts-toggle') {
+      state.alertsOn = e.target.checked;
+      localStorage.setItem('skal.alerts', state.alertsOn ? '1' : '0');
+      if (state.alertsOn) pollMetrics(true);
+      return;
+    }
     if (e.target.id !== 'metrics-toggle') return;
     state.metricsOn = e.target.checked;
     localStorage.setItem('skal.metrics', state.metricsOn ? '1' : '0');
@@ -716,7 +992,7 @@ function bindUI() {
 
   document.addEventListener('mousedown', (e) => { if (!e.target.closest('#ctx')) $('#ctx').hidden = true; });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') { $('#ctx').hidden = true; if (!$('#editor').hidden && $('#modal').hidden) closeEditor(); }
+    if (e.key === 'Escape') { $('#ctx').hidden = true; if (!$('#editor').hidden && $('#modal').hidden && $('#dlg').hidden) closeEditor(); }
     if (e.target.closest('.xterm')) return; // terminalen håndterer selv sine genveje
     if (handleShortcut(e)) e.preventDefault();
   });
@@ -729,6 +1005,7 @@ function bindUI() {
 (async function init() {
   state.canEncrypt = await api.canEncrypt();
   await loadHosts();
+  state.snippets = await api.snippetsGet().catch(() => []);
   api.onData((id, data) => getTab(id)?.term.write(data));
   api.onClosed((id, msg, exited) => {
     const t = getTab(id);
@@ -743,4 +1020,7 @@ function bindUI() {
   bindUI();
   // Sprog: tidligere valg, ellers styresystemets sprog (engelsk hvis det ikke findes)
   await setLanguage(localStorage.getItem('skal.lang') || I18N.detect(await api.locale()));
+  // Se efter en ny version ved start og derefter hver 6. time
+  setTimeout(checkForUpdate, 5000);
+  setInterval(checkForUpdate, 6 * 3600 * 1000);
 })();

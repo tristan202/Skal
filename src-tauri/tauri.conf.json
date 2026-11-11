@@ -27,17 +27,40 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Allan",
     "copyright": "GPL-3.0-or-later",
     "category": "DeveloperTool",
     "shortDescription": "A small SSH client with tabs and an editable server list",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
     "windows": {
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["English", "Danish"],
+        "languages": [
+          "English",
+          "Danish"
+        ],
         "displayLanguageSelector": false
+      }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IENERkZBQ0FFNzY5NUM5OTIKUldTU3laVjJycXovemVpZFdhYUovb1JIRzRpZWZocG1RdkxBWk9rVE5WTlN3Z3F4cXFCSUJ1Y0kK",
+      "endpoints": [
+        "https://github.com/tristan202/Skal/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
       }
     }
   }

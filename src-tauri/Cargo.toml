@@ -1,6 +1,6 @@
 [package]
 name = "skal"
-version = "0.4.0"
+version = "0.5.0"
 description = "Skal – a small SSH client with tabs and an editable server list"
 authors = ["Allan"]
 license = "GPL-3.0-or-later"
@@ -18,6 +18,9 @@ tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-clipboard-manager = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+ring = "0.17"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }

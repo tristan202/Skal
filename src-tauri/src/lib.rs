@@ -1,4 +1,6 @@
 mod error;
+mod import;
+mod keys;
 mod local;
 mod sftp;
 mod ssh;
@@ -111,6 +113,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(AppState::default())
         .setup(|app| {
             status::start_cleanup(app.handle().clone());
@@ -126,6 +130,11 @@ pub fn run() {
             hosts_save,
             hosts_duplicate,
             hosts_delete,
+            import::hosts_import_scan,
+            import::hosts_import,
+            keys::key_setup,
+            store::snippets_get,
+            store::snippets_set,
             ssh::hostkey_answer,
             ssh::ssh_connect,
             ssh::ssh_write,

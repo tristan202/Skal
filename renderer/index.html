@@ -31,6 +31,7 @@
         <button id="sidebar-toggle" class="icon-btn" data-i18n-title="sidebar.toggle"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M6 2.5v11"/></svg></button>
         <button class="tab tab-home active" data-id="home" data-i18n="tab.hosts" data-i18n-title="tab.hostsTitle"></button>
         <div id="tabs"></div>
+        <button id="snip-btn" class="icon-btn" hidden data-i18n-title="snip.title"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M5 4.5 1.5 8 5 11.5M11 4.5 14.5 8 11 11.5M9.2 3 6.8 13"/></svg></button>
         <div id="view-switch" class="view-switch" hidden data-i18n-title="view.title"><button data-view="terminal" data-i18n="view.terminal"></button><button data-view="files" data-i18n="view.files"></button></div>
       </div>
       <section id="home-view"></section>
@@ -93,6 +94,10 @@
   </div>
 
   <div id="ctx" class="ctx" hidden></div>
+  <div id="toasts" class="toasts" aria-live="polite"></div>
+
+  <!-- Almindelig dialog (gruppe, import, snippets, nøgle, opdatering) – indhold sættes af dialog() -->
+  <div id="dlg" class="modal-backdrop" hidden><form class="modal" id="dlg-form" novalidate></form></div>
 
   <div id="modal" class="modal-backdrop" hidden>
     <form class="modal" id="pw-form">

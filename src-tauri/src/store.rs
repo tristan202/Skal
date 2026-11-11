@@ -90,6 +90,17 @@ pub fn write_known(k: &HashMap<String, String>) -> Result<()> {
     write_json(known_file(), k)
 }
 
+// Snippets: [{ name, cmd, run }] – gemmes som de er, brugerfladen ejer formatet
+#[tauri::command]
+pub fn snippets_get() -> Vec<Value> {
+    read_json(data_dir().join("snippets.json"))
+}
+#[tauri::command]
+pub fn snippets_set(list: Vec<Value>) -> Result<bool> {
+    write_json(data_dir().join("snippets.json"), &list)?;
+    Ok(true)
+}
+
 // Electron-versionen krypterede med Chromiums os_crypt; de omkrypteres én gang til DPAPI
 pub fn migrate_secrets() {
     let mut hosts = read_hosts();

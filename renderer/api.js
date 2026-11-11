@@ -172,6 +172,22 @@
     // Serverstatus
     metrics,
     ping: (ids) => call('ping_check', { ids }),
+
+    // Import, SSH-nøgle og snippets
+    importScan: () => call('hosts_import_scan'),
+    importHosts: (items) => call('hosts_import', { items }),
+    keySetup: (hostId, password) => call('key_setup', { hostId, password }),
+    snippetsGet: () => call('snippets_get'),
+    snippetsSet: (list) => call('snippets_set', { list }),
+
+    // Windows-notifikation (advarsler)
+    notify: async (title, body) => {
+      const n = T.notification;
+      if (!(await n.isPermissionGranted()) && (await n.requestPermission()) !== 'granted') return;
+      n.sendNotification({ title, body });
+    },
+    // Ny version på GitHub? null hvis ikke (eller hvis tjekket fejler, fx uden net)
+    checkUpdate: () => T.updater.check().catch(() => null),
   };
 
   // WebView2's egne genveje (genindlæs, udskriv, søg, ny side …) må ikke slå igennem –

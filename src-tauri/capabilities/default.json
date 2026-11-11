@@ -7,6 +7,8 @@
     "dialog:allow-open",
     "dialog:allow-ask",
     "clipboard-manager:allow-read-text",
-    "clipboard-manager:allow-write-text"
+    "clipboard-manager:allow-write-text",
+    "notification:default",
+    "updater:default"
   ]
 }

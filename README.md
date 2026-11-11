@@ -20,6 +20,8 @@ Build the Windows installer (ends up in `src-tauri/target/release/bundle/nsis`):
 npm run dist
 ```
 
+The build also signs the update files that the app's auto-updater downloads, so it needs the private signing key: set `TAURI_SIGNING_PRIVATE_KEY` to the key file (or its contents) before building. Without the key, build with `npm run tauri -- build --config "{\"bundle\":{\"createUpdaterArtifacts\":false}}"`. The public key is in `src-tauri/tauri.conf.json`; a release needs the installer, its `.sig` file and a `latest.json` uploaded to GitHub.
+
 ## Features
 
 - Server list with groups, search and colors. Create, edit, duplicate and delete servers from the panel on the right or by right-clicking. Double-click to connect.
@@ -29,6 +31,14 @@ npm run dist
 - Host key checking with "trust on first use" and a clear warning if a server's key changes.
 - Quick connect: type `user@host` or `user@host:2222` in the search field and press Enter.
 - PuTTY habits: select text to copy, right-click to paste.
+- Import servers from `~/.ssh/config` and PuTTY's saved sessions (**Import …** on the Hosts page). Passwords are not imported.
+- Groups: right-click a server to move it to another group; right-click a group heading to rename it or connect to every server in it.
+- One-click SSH key login: right-click a server that uses a password and choose **Set up SSH key login**. Skal creates `~/.ssh/id_ed25519` if it doesn't exist, adds the public key to the server's `authorized_keys`, checks that it works and switches the server to key login.
+- Split screen (Ctrl+Shift+E): a second session to the same server side by side with the first.
+- Snippets (Ctrl+Shift+S or the `</>` button): saved commands you can insert into the terminal, optionally followed by Enter.
+- Type to several tabs at once (Ctrl+Shift+B, or right-click a tab): useful for updating several servers together. Tabs that receive the input are marked ⇶ with a yellow frame.
+- Quick actions on each server (right-click → **Quick actions**): processes, system log, Docker containers, disk usage, package updates and restart. Each opens a new tab and runs the command there, so `sudo` prompts work as usual. Your snippets are listed there too.
+- Automatic updates: Skal checks GitHub for a new version at startup and every 6 hours and asks before installing it.
 
 ### Files (dual-pane, like Total Commander / mc)
 
@@ -63,6 +73,10 @@ The Hosts page shows CPU, RAM, disk, load, uptime and operating system for Linux
 
 If you have a session open to the server, it's used. Otherwise Skal keeps a quiet background connection open as long as the page is shown; it closes after 3 minutes of inactivity. Background connections never prompt for anything, so the server must have a saved login (password, key or agent), and its host key must have been accepted during an earlier connection. Can be turned off with **Server status** at the top of the page.
 
+### Alerts
+
+Turn on **Alerts** on the Hosts page to get a Windows notification when a server goes offline or comes back, when a disk passes 90 %, or when the 5-minute load average is above 1.5 per core. With alerts on, Skal checks every server once a minute in the background, also while you're working in a tab or the window is minimized. Disk and load alerts need server status to work for the server (saved login); offline alerts work for every server.
+
 ## Languages
 
 Skal is available in Danish, English, German, French, Italian, Spanish and Swedish. On first launch it uses the Windows language (English if it isn't one of the seven). Change it at the bottom of the sidebar – it takes effect immediately, including in open sessions, dialogs and error messages.
@@ -79,12 +93,15 @@ All strings live in `renderer/strings.js` with the seven languages side by side.
 | Ctrl+Shift+W | Close tab |
 | Ctrl+Shift+D | Duplicate session |
 | Ctrl+Shift+F | Switch between terminal and files |
+| Ctrl+Shift+E | Split screen with a new session |
+| Ctrl+Shift+S | Snippets |
+| Ctrl+Shift+B | Type to several tabs (on/off) |
 | Ctrl+Shift+C / V | Copy / paste |
 | Middle-click on tab | Close tab |
 
 ## Where data is stored
 
-`hosts.json` and `known_hosts.json` are stored in `%APPDATA%\Skal`. The installed version lives in `%LOCALAPPDATA%\Skal`.
+`hosts.json`, `known_hosts.json` and `snippets.json` are stored in `%APPDATA%\Skal`. The installed version lives in `%LOCALAPPDATA%\Skal`.
 
 ## Structure
 
@@ -93,6 +110,8 @@ All strings live in `renderer/strings.js` with the seven languages side by side.
   - `store.rs`: storage and password encryption
   - `ssh.rs`: SSH connections, login, host key checking and terminal sessions
   - `sftp.rs`: file transfer and editing of server files
+  - `import.rs`: import from `~/.ssh/config` and PuTTY
+  - `keys.rs`: SSH key creation and installation on a server
   - `local.rs`: the local side of the file manager
   - `status.rs`: server status and the online dot
 - `renderer/`: the user interface (`api.js` is the bridge to the backend; `renderer.js`, `commander.js`, `strings.js` with all strings, HTML and CSS)
